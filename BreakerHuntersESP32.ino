@@ -8,13 +8,13 @@
 
 */
 
-
 // ==== Bibliotecas ====
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <SPI.h>
 #include <Ethernet.h>
-#include "secrets.h"
+#include <Base64.h>
+#include <ArduinoJson.h>
 
 // === Pinos ===
 #define W5500_CS 22       // Chip Select do ethernet (W5500)
@@ -22,8 +22,9 @@
 const int relayPin = 13;  // Pino rele
 const int lampPin = 14;   // Pino lampada
 
-WiFiServer wifiServer(80);                 // Porta para conexões WiFi (HTTP)
-WiFiClient wifiFacility;                   // Utilizado para GET
+// === Configuração WiFi  ===
+WiFiClient wifiFacility;  // Utilizado para conectar ao wifi
+HTTPClient http;          // Utilizado para GET
 
 // === Configuração Ethernet ===
 
@@ -37,7 +38,7 @@ unsigned long wifiRetryStart = 0;  // Tempo de tentativa de reconexao
 unsigned long ethRetryStart = 0;   //
 
 bool wifiRetry = false;  // Tentando reconectar
-bool ethRetry = false;   // 
+bool ethRetry = false;   //
 bool newRead = false;    // Nova leitura para checagem
 
 String familyLaser = "";  // Familia recebida na laser
@@ -52,9 +53,9 @@ void setup() {
   pinMode(lampPin, OUTPUT);
   pinMode(LED_BUILTIN, OUTPUT);
 
-  digitalWrite(relayPin, HIGH); // Rele aciona com LOW
+  digitalWrite(relayPin, HIGH);  // Rele aciona com LOW
   digitalWrite(lampPin, HIGH);
-  digitalWrite(LED_BUILTIN, LOW); // Led azul interno aciona com LOW
+  digitalWrite(LED_BUILTIN, LOW);  // Led azul interno aciona com LOW
 
   initNetworks();
 }
@@ -252,7 +253,11 @@ void Reader() {
 void Relay() {
   if (newRead) {
     Serial.printf("familyRead %s e familyLaser %s\n", familyRead.c_str(), familyLaser.c_str());
-    if (familyRead != "" && familyRead != familyLaser) {
+
+    int result = TestCheck();
+    Serial.printf("TestCheck = %d\n", result);
+
+    if (familyRead != "" && familyRead != familyLaser && result != 1) {
       digitalWrite(relayPin, LOW);
       digitalWrite(lampPin, LOW);
       Serial.println("Rele ligado - valores diferentes");
@@ -263,6 +268,65 @@ void Relay() {
     }
     newRead = false;
   }
+}
+
+int TestCheck() {
+  if (WiFi.status() != WL_CONNECTED) return -1;
+
+  HTTPClient http;
+  // String fullUrl = url + msgReader;
+  String fullUrl = url + "A";
+  http.begin(wifiFacility, fullUrl);
+  http.addHeader("Authorization", "Basic " + encodedAuth);
+  http.setTimeout(2000);  // 2 segundos
+
+  unsigned long inicioRequisicao = millis();
+  int httpCode = http.GET();
+
+  unsigned long fimRequisicao = millis();
+  unsigned long duracao = fimRequisicao - inicioRequisicao;
+  Serial.print("Tempo da requisição: ");
+  Serial.print(duracao);
+  Serial.println(" ms");
+
+
+  if (httpCode > 0) {
+    String payload = http.getString();
+
+    // Aloca buffer para o JSON
+    const size_t capacity = 1024;
+    DynamicJsonDocument doc(capacity);
+
+    // Faz o parsing do JSON
+    DeserializationError error = deserializeJson(doc, payload);
+    if (error) {
+      Serial.print("Erro ao fazer parsing do JSON: ");
+      Serial.println(error.c_str());
+      return 0;
+    }
+    if (doc["testes"][0]["RESULTADO"].isNull()) {
+      Serial.println("Campo RESULTADO não encontrado.");
+      http.end();
+      return 0;
+    }
+    String resultado = doc["testes"][0]["RESULTADO"].as<String>();
+    Serial.print("Resultado: ");
+    Serial.println(resultado);
+    if (resultado == "PASS") {
+      Serial.println("Passou na calibradora!");
+      http.end();
+      return 1;
+    } else {
+      Serial.println("Falhou na calibradora!");
+      http.end();
+      return 0;
+    }
+  } else {
+    Serial.printf("Erro na requisição: %s\n", http.errorToString(httpCode).c_str());
+  }
+
+  http.end();
+  return 0;
 }
 
 void loop() {

@@ -13,6 +13,7 @@ String encodedAuth ="SUA_AUTENTIFICACAO_CODIFICADA"
 String urlBase = "https://seuservidor.com/api/?leitura=";
 
 // IP Estático (opcional)
+#include <IPAddress.h>  // Importante manter aqui
 IPAddress local_IP(192, 168, 1, 100);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);

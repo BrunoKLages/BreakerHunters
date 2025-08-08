@@ -15,6 +15,7 @@
 #include <Ethernet.h>
 #include <Base64.h>
 #include <ArduinoJson.h>
+#include "secrets.h"
 
 // === Pinos ===
 #define W5500_CS 22       // Chip Select do ethernet (W5500)
@@ -23,11 +24,11 @@ const int relayPin = 13;  // Pino rele
 const int lampPin = 14;   // Pino lampada
 
 // === Configuração WiFi  ===
-WiFiClient wifiFacility;  // Utilizado para conectar ao wifi
-HTTPClient http;          // Utilizado para GET
+WiFiClient wifiFacility;    // Utilizado para conectar ao wifi
+HTTPClient http;            // Utilizado para GET
+WiFiServer wifiServer(80);  // Porta para conexão wifi (HTTP)
 
 // === Configuração Ethernet ===
-
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  // Endereço físico do modulo
 IPAddress ethIP(192, 168, 0, 20);                     // IP estático da interface Ethernet
 EthernetServer ethServer(9004);                       // Porta para conexões Ethernet
@@ -87,7 +88,7 @@ void initNetworks() {
   Ethernet.init(W5500_CS);
   Ethernet.begin(mac, ethIP);
   delay(500);
-  if (Ethernet.localIP()[0] != 0) {
+  if (Ethernet.localIP() == IPAddress(0, 0, 0, 0)) {
     Serial.printf("Ethernet OK. IP: %s\n", Ethernet.localIP().toString().c_str());
     ethServer.begin();
   } else {
@@ -117,10 +118,8 @@ void WifiCheck() {
   if (wifiRetry) {
     Serial.printf("WiFi reconectado com sucesso! IP: %s\n", WiFi.localIP().toString().c_str());
     wifiRetry = false;
-    if (!wifiServer) {
-      wifiServer.begin();
-      Serial.println("Servidor Wi-Fi iniciado após reconexão");
-    }
+    wifiServer.begin();
+    Serial.println("Servidor Wi-Fi iniciado após reconexão");
   }
 }
 
